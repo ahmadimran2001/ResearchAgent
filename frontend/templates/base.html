@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Research Agent{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='app.css') }}">
+  <script src="{{ url_for('static', path='app.js') }}" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Research Agent</a>
+    <nav aria-label="Workflow">
+      {% for item in stages %}
+        <a href="/{{ item }}" {% if stage == item %}aria-current="page"{% endif %}>{{ item|title }}</a>
+      {% endfor %}
+      <a href="/feedback">Feedback</a>
+    </nav>
+    <span id="health" class="health" title="Ollama status">Checking model…</span>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  <footer>Local-first · Data stays in your SQLite database</footer>
+</body>
+</html>

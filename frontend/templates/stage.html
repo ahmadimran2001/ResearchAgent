@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ stage|title }} · Research Agent{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Workflow stage</p>
+    <h1>{{ stage|title }}</h1>
+  </div>
+  {% if project %}
+    <button class="run-stage" data-project="{{ project.id }}" data-stage="{{ stage }}">
+      Run {{ stage }}
+    </button>
+  {% endif %}
+</section>
+
+{% if project %}
+<section class="card project-summary">
+  <div>
+    <h2>{{ project.topic }}</h2>
+    <p>{{ project.question or "No research question supplied." }}</p>
+  </div>
+  <span class="status">{{ project.status }}</span>
+</section>
+
+<nav class="steps" aria-label="Project stages">
+  {% for item in stages %}
+    <a href="/{{ item }}/{{ project.id }}" {% if item == stage %}aria-current="step"{% endif %}>
+      {{ loop.index }}. {{ item|title }}
+    </a>
+  {% endfor %}
+</nav>
+
+<div id="job-status" class="job-status" hidden></div>
+{% if stage == "experiments" %}
+<section class="card">
+  <h2>1. Upload a local CSV</h2>
+  <form id="dataset-upload" data-project="{{ project.id }}">
+    <input name="dataset" type="file" accept=".csv,text/csv" required>
+    <button type="submit">Upload dataset</button>
+  </form>
+  <p id="dataset-status"></p>
+
+  <h2>2. Review and approve a bounded experiment</h2>
+  <form id="experiment-run" data-project="{{ project.id }}">
+    <label>
+      Dataset
+      <select name="dataset_artifact_id" required>
+        <option value="">Select a previously uploaded dataset</option>
+        {% for dataset in datasets %}
+          <option value="{{ dataset.id }}">{{ dataset.title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Experiment ID
+      <input name="experiment_id" value="descriptive-{{ project.id }}" required
+             pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,63}">
+    </label>
+    <label>
+      Allow-listed operation JSON
+      <textarea name="operation" rows="7" required>{
+  "template": "descriptive_statistics",
+  "columns": null,
+  "include_categorical": true
+}</textarea>
+    </label>
+    <label class="check">
+      <input name="approved" type="checkbox" required>
+      I reviewed this specification and approve execution on my machine.
+    </label>
+    <button type="submit">Run approved experiment</button>
+  </form>
+  <pre id="experiment-status"></pre>
+</section>
+{% endif %}
+<section>
+  <h2>Results</h2>
+  {% if artifacts %}
+    <div class="artifact-list">
+    {% for artifact in artifacts %}
+      <article class="card artifact">
+        <div class="artifact-head">
+          <h3>{{ artifact.title or stage|title }}</h3>
+          <time>{{ artifact.created_at[:19]|replace("T", " ") }}</time>
+        </div>
+        <p>{{ artifact.data.summary or artifact.content }}</p>
+        {% if artifact.data.items %}
+          <ul>
+          {% for item in artifact.data.items %}
+            <li><pre>{{ item|tojson(indent=2) }}</pre></li>
+          {% endfor %}
+          </ul>
+        {% endif %}
+      </article>
+    {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">No {{ stage }} result yet. Run this stage when its inputs are ready.</div>
+  {% endif %}
+  {% if stage == "exports" %}
+    <p class="export-actions">
+      <a class="button secondary" href="/api/projects/{{ project.id }}/export/markdown">Markdown</a>
+      <a class="button secondary" href="/api/projects/{{ project.id }}/export/bibtex">BibTeX</a>
+      <a class="button secondary" href="/api/projects/{{ project.id }}/export/docx">DOCX</a>
+    </p>
+  {% endif %}
+</section>
+{% else %}
+<section class="card">
+  <h2>Choose a workspace</h2>
+  {% if projects %}
+    <ul class="project-list">
+    {% for item in projects %}
+      <li><a href="/{{ stage }}/{{ item.id }}">{{ item.topic }}</a><small>{{ item.status }}</small></li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p>Create a workspace on the <a href="/">home page</a> first.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

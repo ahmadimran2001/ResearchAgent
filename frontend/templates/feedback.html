@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Feedback · Research Agent{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div><p class="eyebrow">Improve the workflow</p><h1>Feedback</h1></div>
+</section>
+<section class="card narrow">
+  {% if sent %}<p class="notice">Thanks — your feedback was saved locally.</p>{% endif %}
+  <form action="/feedback" method="post">
+    <label>Workspace
+      <select name="project_id">
+        <option value="">General feedback</option>
+        {% for project in projects %}<option value="{{ project.id }}">{{ project.topic }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Rating
+      <select name="rating">
+        <option value="">Not rated</option>
+        {% for value in range(1, 6) %}<option value="{{ value }}">{{ value }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Comment<textarea name="comment" required maxlength="5000"></textarea></label>
+    <button type="submit">Save feedback</button>
+  </form>
+</section>
+<section class="card narrow">
+  <h2>Consented training correction</h2>
+  <p>
+    This optional form stores a redacted scholarly-query correction for local specialist
+    training. Nothing is uploaded. Publication consent is separate from training consent.
+  </p>
+  {% if training_sent %}
+    <p class="notice">The redacted correction was saved locally.</p>
+  {% endif %}
+  <form action="/training-feedback" method="post">
+    <label>Source/session grouping ID
+      <input name="source" required maxlength="200"
+             placeholder="Use the same private label for related examples">
+    </label>
+    <label>Original research prompt
+      <textarea name="prompt" required maxlength="5000"></textarea>
+    </label>
+    <label>Accepted concepts (comma-separated)
+      <input name="concepts" maxlength="3000">
+    </label>
+    <label>Accepted synonyms (JSON object)
+      <textarea name="synonyms" maxlength="5000">{}</textarea>
+    </label>
+    <label>Exclusions (comma-separated)
+      <input name="exclusions" maxlength="3000">
+    </label>
+    <label>Accepted final scholarly query
+      <textarea name="query" required maxlength="5000"></textarea>
+    </label>
+    <label class="check">
+      <input type="checkbox" name="consent_training" required>
+      I explicitly consent to using this redacted correction for local model training.
+    </label>
+    <label class="check">
+      <input type="checkbox" name="consent_publication">
+      I also consent to including this example in a model that may be published.
+    </label>
+    <button type="submit">Save consented correction</button>
+  </form>
+</section>
+{% endblock %}

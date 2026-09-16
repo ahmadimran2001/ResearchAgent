@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Research Agent{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">Local research workspace</p>
+  <h1>Turn a question into a traceable research package.</h1>
+  <p>Move through source gathering, novelty analysis, drafting, experiment planning, and export.</p>
+</section>
+
+<section class="grid two">
+  <article class="card">
+    <h2>Start research</h2>
+    <form action="/research" method="post">
+      <label>Topic<input name="topic" required minlength="2" maxlength="300" placeholder="e.g. Retrieval evaluation"></label>
+      <label>Research question<textarea name="question" maxlength="2000" placeholder="What do you want to establish?"></textarea></label>
+      <label>Draft structure
+        <select name="document_type">
+          <option value="proposal">Research proposal</option>
+          <option value="literature_review">Literature review</option>
+          <option value="imrad">IMRaD research paper</option>
+        </select>
+      </label>
+      <button type="submit">Create workspace</button>
+    </form>
+  </article>
+  <article class="card">
+    <h2>Recent workspaces</h2>
+    {% if projects %}
+      <ul class="project-list">
+      {% for project in projects %}
+        <li>
+          <a href="/research/{{ project.id }}">{{ project.topic }}</a>
+          <small>{{ project.status }}</small>
+        </li>
+      {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No research projects yet.</p>
+    {% endif %}
+  </article>
+</section>
+{% endblock %}
