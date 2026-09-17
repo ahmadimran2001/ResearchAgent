@@ -206,23 +206,8 @@ class ChatService:
                     )
                 pending = ""
                 last_flush = 0.0
-
-                def flush_delta() -> bytes | None:
-                    nonlocal pending, last_flush
-                    if not pending:
-                        return None
-                    chunk, pending = pending, ""
-                    last_flush = time.monotonic()
-                    self.repository.append_message(active_message, chunk)
-                    return self._event(
-                        {
-                            "type": "message.delta",
-                            "message_id": active_message,
-                            "delta": chunk,
-                            "lane": lane,
-                        }
-                    )
-
+                stream_message_id = active_message
+                stream_lane = lane
                 async for delta in self.registry.stream(
                     model_id, messages, cancelled=run.cancelled.is_set
                 ):
@@ -230,12 +215,28 @@ class ChatService:
                         break
                     pending += delta
                     if last_flush == 0.0 or len(pending) >= 32 or time.monotonic() - last_flush >= 0.05:
-                        event = flush_delta()
-                        if event:
-                            yield event
-                leftover = flush_delta()
-                if leftover:
-                    yield leftover
+                        chunk, pending = pending, ""
+                        last_flush = time.monotonic()
+                        self.repository.append_message(stream_message_id, chunk)
+                        yield self._event(
+                            {
+                                "type": "message.delta",
+                                "message_id": stream_message_id,
+                                "delta": chunk,
+                                "lane": stream_lane,
+                            }
+                        )
+                if pending:
+                    self.repository.append_message(stream_message_id, pending)
+                    yield self._event(
+                        {
+                            "type": "message.delta",
+                            "message_id": stream_message_id,
+                            "delta": pending,
+                            "lane": stream_lane,
+                        }
+                    )
+                    pending = ""
                 state = "cancelled" if run.cancelled.is_set() else "complete"
                 self.repository.update_message(active_message, state=state)
                 yield self._event(
