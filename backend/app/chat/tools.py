@@ -56,10 +56,9 @@ class ResearchToolRouter:
                 "literature",
                 "papers",
                 "scholarly",
-                "sources",
-                "citations",
                 "related work",
                 "find recent work",
+                "search the literature",
             )
         ):
             return "literature_search"
@@ -111,9 +110,9 @@ class ResearchToolRouter:
         async with LiteratureRetriever(sources=sources) as retriever:
             response = await retriever.search(
                 query,
-                per_source=min(self.settings.literature_per_source, 5),
+                per_source=min(self.settings.literature_per_source, 3),
                 expansion_count=1,
-                max_results=min(self.settings.literature_max_results, 12),
+                max_results=min(self.settings.literature_max_results, 8),
             )
         evidence, citations = [], []
         for index, paper in enumerate(response.papers):

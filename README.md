@@ -1,100 +1,151 @@
 # Research Agent
 
-Research Agent is a local-first Windows desktop research chat. It uses **Ollama**
-models (Phi-4 Mini by default, plus any other models you have installed) together
-with evidence-first literature search, bounded novelty analysis, citation-validated
-drafting, approved CSV experiments, PDF/image/document attachments, and persistent
-chat history.
+Research Agent is a **Windows chat app** that runs on your computer. You can ask questions, attach PDFs or images, and search scholarly sources. Answers come from AI models on your machine (through Ollama), not from a cloud account.
 
-Language models are downloaded and served by Ollama. This repository does not ship
-or train a custom Transformer.
+Chats stay on your PC. The app does not upload your conversations.
 
-## Windows quick start
+---
 
-Prerequisites: Windows 10/11, Python 3.10+, Node.js 20+, Ollama, and about 6 GB free
-disk space. The desktop build additionally needs Rust stable and the Visual Studio 2022
-**Desktop development with C++** workload (MSVC and Windows SDK).
+## Before you start (install these once)
 
-Install the official native prerequisites from an elevated PowerShell window:
+You need a Windows 10 or 11 PC, an internet connection for the first setup, and about **10 GB free** on a drive that is **not C:** (usually **D:**).
+
+Install these three programs if you do not already have them. Use the default options, and restart the computer if an installer asks you to.
+
+1. **Git** — [https://git-scm.com/download/win](https://git-scm.com/download/win)
+2. **Python 3.10 or newer** — [https://www.python.org/downloads/](https://www.python.org/downloads/)  
+   On the first installer screen, tick **Add python.exe to PATH**.
+3. **Node.js LTS** — [https://nodejs.org/](https://nodejs.org/)
+
+You do **not** need Visual Studio or Rust to use the chat in a browser.
+
+---
+
+## First time only: copy the project and set it up
+
+### 1. Open PowerShell
+
+Click the Start menu, type `PowerShell`, and open **Windows PowerShell**.
+
+### 2. Download the project
+
+Copy this whole block, paste it into PowerShell, and press Enter:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/configure-native-tools.ps1
-powershell -ExecutionPolicy Bypass -File scripts/install-build-tools.ps1
-powershell -ExecutionPolicy Bypass -File scripts/verify-native-tools.ps1
-```
-
-These scripts place Rustup/Cargo under `D:\DevTools`, build and package caches under
-`D:\Caches`, and request D: locations for Build Tools, its download cache, shared tools,
-and temporary files. Microsoft documents that its installer and some Windows SDK/shared
-components can still require system-drive space.
-
-```powershell
-git clone <repository-url>
+cd D:\Projects
+git clone https://github.com/ahmadimran2001/ResearchAgent.git
 cd ResearchAgent
-powershell -ExecutionPolicy Bypass -File scripts/setup-windows.ps1
-Copy-Item .env.example .env
-ollama pull phi4-mini
 ```
 
-Run the browser-development UI in two terminals:
+If you do not have a `D:\Projects` folder, use your Documents folder instead:
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
-npm run dev
+cd $HOME\Documents
+git clone https://github.com/ahmadimran2001/ResearchAgent.git
+cd ResearchAgent
 ```
 
-Open <http://127.0.0.1:1420>. For the native desktop:
+### 3. Install the app’s own files
+
+Stay in that folder and run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/build-sidecar.ps1
-powershell -ExecutionPolicy Bypass -File scripts/verify-packaged-sidecar.ps1
-npm run desktop:dev
+powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
 ```
 
-Build signed-or-unsigned local MSI/NSIS artifacts (nothing is uploaded):
+This can take several minutes. Wait until it finishes with no red error.
+
+### 4. Install the AI (Ollama + Phi-4 Mini)
+
+This step puts the AI program and the Phi-4 Mini model **off the C: drive** (default: `D:\DevTools\Ollama` and `D:\Caches\Ollama\models`). It can download a few GB and may take 10–20 minutes.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1
+powershell -ExecutionPolicy Bypass -File scripts\install-ollama-phi4.ps1
 ```
 
-## Chat, comparison, and research behavior
+**If you already use Ollama and already have Phi-4 Mini**, skip this step.
 
-The Tauri shell starts a PyInstaller sidecar on an ephemeral loopback port, injects a
-random bearer token into the webview, waits for readiness, and kills the sidecar on exit.
-SQLite persists conversations, branches, partial/cancelled streams, compare linkage, and
-citations. Compare mode runs installed Ollama models sequentially to avoid memory
-contention and supplies both with one stored evidence packet.
+**If you have no D: drive**, install to another non-C: drive, for example E:
 
-Research tools use an allow-list. Retrieved text is untrusted data, novelty claims are
-bounded by searched providers/date, unknown citation IDs are rejected before validated
-export, and experiments run only declared built-in operations after explicit approval.
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-ollama-phi4.ps1 -InstallRoot E:\Tools\Ollama -ModelsRoot E:\Caches\Ollama\models
+```
 
-## Verification
+Leave Ollama running after this. If Windows asks for network permission, allow it.
+
+---
+
+## Every time you want to use the app
+
+1. Open PowerShell.
+2. Go to the project folder:
+
+```powershell
+cd D:\Projects\ResearchAgent
+```
+
+(Use the folder you cloned into if it is different.)
+
+3. Start the app:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1
+```
+
+4. A browser tab should open at [http://127.0.0.1:1420](http://127.0.0.1:1420). If it does not, open that address yourself.
+5. Wait until the model menu shows **Phi-4 Mini** as ready (not “unavailable”). Then type a question and press Enter.
+
+Keep the PowerShell window open while you chat. To stop the app, click that window and press **Ctrl+C**, or close the window.
+
+The first answer after a restart can be slow while the model loads. Later answers in the same session are usually faster. Leave Ollama running in the background.
+
+---
+
+## If something goes wrong
+
+| What you see | What to try |
+| --- | --- |
+| `python` / `py` was not found | Reinstall Python and tick **Add python.exe to PATH**, then open a **new** PowerShell window. |
+| `npm` was not found | Reinstall Node.js LTS, then open a **new** PowerShell window. |
+| `git` was not found | Install Git, then open a **new** PowerShell window. |
+| Backend failed to start | Read `data\logs\sidecar-stderr.log` in the project folder. Close other PowerShell windows that might already be running the app. |
+| Model not ready / Phi-4 Mini unavailable | Run `scripts\install-ollama-phi4.ps1`. Make sure Ollama is running. |
+| Script cannot use C: | Pass a D: or E: folder as shown in step 4. |
+| Page will not load | Confirm `scripts\start.ps1` is still running, then visit http://127.0.0.1:1420 |
+
+---
+
+## What this app will not do
+
+- It is not a doctor, lawyer, or publisher. Check important facts yourself.
+- It can be wrong, including about papers and citations.
+- It is meant for one person on a normal laptop (about 8 GB RAM). Do not turn on **Compare** unless you have two models and extra memory.
+
+---
+
+## For developers (optional)
+
+Browser chat is enough for normal use. Packaging a Windows installer needs Rust and Visual Studio C++ tools.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\configure-native-tools.ps1
+powershell -ExecutionPolicy Bypass -File scripts\install-build-tools.ps1
+powershell -ExecutionPolicy Bypass -File scripts\package-windows.ps1
+```
+
+Tests:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m compileall -q backend tests
 npm test
 npm run typecheck
-npm run build
-npm audit --audit-level=high
-cargo fmt --manifest-path src-tauri\Cargo.toml -- --check
-cargo check --manifest-path src-tauri\Cargo.toml
 ```
 
-See `docs/architecture.md`, `docs/security.md`, `docs/qa-strategy.md`,
-and `THIRD_PARTY_NOTICES.md`.
+More detail: `docs/architecture.md`, `docs/security.md`, `docs/qa-strategy.md`, `THIRD_PARTY_NOTICES.md`.
 
-## Privacy, limitations, and hardware
-
-Chats, uploads, databases, sidecar builds, and secrets stay in ignored local paths.
-Research Agent does not provide a hostile-code sandbox and must not be used for
-autonomous medical, legal, safety-critical, or publication decisions. Source APIs can
-be incomplete or rate-limited. Ollama models can hallucinate. The target machine has
-8 GB RAM and no CUDA requirement; do not run two large models concurrently.
+---
 
 ## License
 
-Repository code is MIT licensed; see `LICENSE`. Phi-4 Mini, Ollama, source APIs,
-libraries, and user-provided datasets retain their own terms.
+This project’s code is MIT licensed; see `LICENSE`. Phi-4 Mini, Ollama, and any papers or files you add keep their own terms.

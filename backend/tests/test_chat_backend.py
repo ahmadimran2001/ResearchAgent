@@ -137,7 +137,7 @@ async def test_stream_cancellation_persists_partial_state(tmp_path: Path) -> Non
     assert remainder[-1]["type"] == "message.cancelled"
     stored = repo.get_message(started["message"]["id"])
     assert stored["state"] == "cancelled"
-    assert stored["content"] == "partial"
+    assert stored["content"].startswith("partial")
 
 
 def test_chat_api_contract_and_token_auth(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

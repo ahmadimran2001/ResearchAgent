@@ -8,6 +8,8 @@ def test_tool_triggers_prefer_novelty_and_drafts() -> None:
     assert router.requested_tool("Assess novelty of my research idea against retrieved literature") == "bounded_novelty"
     assert router.requested_tool("Draft a research outline with verified citations") == "citation_validated_draft"
     assert router.requested_tool("Help design a bounded experiment for my CSV dataset") == "approved_experiment"
+    assert router.requested_tool("Summarize this paragraph in two sentences") is None
+    assert router.requested_tool("What is a citation?") is None
 
 
 def test_evidence_context_always_includes_query_date_and_ids() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import time
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -15,7 +16,7 @@ from backend.app.llm.registry import ModelRegistry
 from backend.app.storage.chat_repository import ChatRepository, is_allowed_model_id
 
 from .ingest import attachment_prompt
-from .policy import SYSTEM_POLICY
+from .policy import CASUAL_POLICY, SYSTEM_POLICY
 from .tools import ResearchToolRouter, evidence_context
 
 
@@ -141,9 +142,12 @@ class ChatService:
                 )
 
             history = self.repository.context_messages(
-                payload.conversation_id, before_message_id=user_message["id"]
+                payload.conversation_id, before_message_id=user_message["id"], limit=6
             )
-            messages = [{"role": "system", "content": SYSTEM_POLICY}]
+            research = bool(packet.get("tool") or getattr(payload, "attachment_ids", None))
+            messages = [
+                {"role": "system", "content": SYSTEM_POLICY if research else CASUAL_POLICY}
+            ]
             evidence = evidence_context(packet)
             if evidence:
                 messages.append({"role": "system", "content": evidence})
@@ -200,20 +204,38 @@ class ChatService:
                             "lane": lane,
                         }
                     )
+                pending = ""
+                last_flush = 0.0
+
+                def flush_delta() -> bytes | None:
+                    nonlocal pending, last_flush
+                    if not pending:
+                        return None
+                    chunk, pending = pending, ""
+                    last_flush = time.monotonic()
+                    self.repository.append_message(active_message, chunk)
+                    return self._event(
+                        {
+                            "type": "message.delta",
+                            "message_id": active_message,
+                            "delta": chunk,
+                            "lane": lane,
+                        }
+                    )
+
                 async for delta in self.registry.stream(
                     model_id, messages, cancelled=run.cancelled.is_set
                 ):
                     if run.cancelled.is_set():
                         break
-                    self.repository.append_message(active_message, delta)
-                    yield self._event(
-                        {
-                            "type": "message.delta",
-                            "message_id": active_message,
-                            "delta": delta,
-                            "lane": lane,
-                        }
-                    )
+                    pending += delta
+                    if last_flush == 0.0 or len(pending) >= 32 or time.monotonic() - last_flush >= 0.05:
+                        event = flush_delta()
+                        if event:
+                            yield event
+                leftover = flush_delta()
+                if leftover:
+                    yield leftover
                 state = "cancelled" if run.cancelled.is_set() else "complete"
                 self.repository.update_message(active_message, state=state)
                 yield self._event(

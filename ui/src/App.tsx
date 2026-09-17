@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
-  BookOpen, Check, ChevronDown, Copy, FileText, FlaskConical, Menu, MessageSquarePlus,
+  ArrowDown, BookOpen, Check, ChevronDown, Copy, FileText, FlaskConical, Menu, MessageSquarePlus,
   PanelLeftClose, Pencil, Plus, Search, Send, Settings, Square, ThumbsDown, ThumbsUp,
   Trash2, X,
 } from "lucide-react";
@@ -34,24 +34,27 @@ function MessageView({ message, onCitations, onFeedback, onRegenerate, onEdit }:
           {message.state === "error" && <span className="error-text">Failed</span>}
         </div>
         <div className="markdown">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              a: ({ ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
-              code: ({ className, children, ...props }) => {
-                const block = /language-/.test(className ?? "");
-                return block ? (
-                  <div className="code-wrap">
-                    <div className="code-head"><span>{className?.replace("language-", "")}</span>
-                      <button onClick={() => navigator.clipboard.writeText(String(children))}><Copy size={13} /> Copy</button>
+          {message.state === "streaming" ? (
+            <pre className="stream-plain">{message.content || " "}<span className="caret" /></pre>
+          ) : (
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                a: ({ ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+                code: ({ className, children, ...props }) => {
+                  const block = /language-/.test(className ?? "");
+                  return block ? (
+                    <div className="code-wrap">
+                      <div className="code-head"><span>{className?.replace("language-", "")}</span>
+                        <button onClick={() => navigator.clipboard.writeText(String(children))}><Copy size={13} /> Copy</button>
+                      </div>
+                      <code className={className} {...props}>{children}</code>
                     </div>
-                    <code className={className} {...props}>{children}</code>
-                  </div>
-                ) : <code className={className} {...props}>{children}</code>;
-              },
-            }}
-          >{message.content || " "}</ReactMarkdown>
-          {message.state === "streaming" && <span className="caret" />}
+                  ) : <code className={className} {...props}>{children}</code>;
+                },
+              }}
+            >{message.content || " "}</ReactMarkdown>
+          )}
         </div>
         {message.attachments && message.attachments.length > 0 && (
           <div className="file-chips">{message.attachments.map((file) => (
@@ -119,12 +122,15 @@ export default function App() {
   const [pendingFiles, setPendingFiles] = useState<{ id: string; filename: string; kind: string }[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLElement | null>(null);
+  const pinToBottom = useRef(true);
+  const [showJump, setShowJump] = useState(false);
   const active = conversations.find((item) => item.id === activeId);
   const compareModel: ModelId =
     models.find((item) => item.id !== model && item.provider === "ollama" && item.ready)?.id
     ?? models.find((item) => item.id !== model)?.id
     ?? model;
+  const modelInfo = useMemo(() => models.find((item) => item.id === model) ?? fallbackModels[0], [models, model]);
 
   const refresh = async (query = "") => {
     try {
@@ -139,11 +145,16 @@ export default function App() {
 
   useEffect(() => {
     void refresh();
-    api.getModels().then(setModels).catch(() => undefined);
+    const loadModels = () => api.getModels().then(setModels).catch(() => undefined);
+    void loadModels();
+    const timer = window.setInterval(() => void loadModels(), 8000);
     const onSidecarError = (event: Event) =>
       setConnectionError((event as CustomEvent<string>).detail || "Sidecar failed to start");
     window.addEventListener("sidecar-error", onSidecarError);
-    return () => window.removeEventListener("sidecar-error", onSidecarError);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("sidecar-error", onSidecarError);
+    };
   }, []);
 
   useEffect(() => {
@@ -154,7 +165,29 @@ export default function App() {
     }).catch((error: Error) => setConnectionError(error.message));
   }, [activeId]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, compareMessages]);
+  const syncJump = () => {
+    const el = chatRef.current;
+    if (!el) return;
+    const pinned = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
+    pinToBottom.current = pinned;
+    setShowJump(!pinned);
+  };
+
+  const scrollToLatest = () => {
+    const el = chatRef.current;
+    pinToBottom.current = true;
+    setShowJump(false);
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  useEffect(() => {
+    if (pinToBottom.current) scrollToLatest();
+  }, [messages, compareMessages]);
+
+  useEffect(() => {
+    pinToBottom.current = true;
+    setShowJump(false);
+  }, [activeId]);
   useEffect(() => {
     const timeout = window.setTimeout(() => void refresh(search), 250);
     return () => window.clearTimeout(timeout);
@@ -169,15 +202,49 @@ export default function App() {
     } catch (error) { setConnectionError((error as Error).message); }
   };
 
+  const deltaQueue = useRef<Extract<StreamEvent, { type: "message.delta" }>[]>([]);
+  const deltaRaf = useRef(0);
+
+  const flushDeltas = () => {
+    deltaRaf.current = 0;
+    const queued = deltaQueue.current;
+    deltaQueue.current = [];
+    if (!queued.length) return;
+    const byLane: Record<"primary" | "compare", Map<string, string>> = {
+      primary: new Map(),
+      compare: new Map(),
+    };
+    for (const event of queued) {
+      const lane = event.lane === "compare" ? "compare" : "primary";
+      byLane[lane].set(event.message_id, (byLane[lane].get(event.message_id) ?? "") + event.delta);
+    }
+    (["primary", "compare"] as const).forEach((lane) => {
+      const chunks = byLane[lane];
+      if (!chunks.size) return;
+      const setter = lane === "compare" ? setCompareMessages : setMessages;
+      setter((items) =>
+        items.map((item) => {
+          const extra = chunks.get(item.id);
+          return extra ? { ...item, content: item.content + extra } : item;
+        }),
+      );
+    });
+  };
+
   const updateEvent = (event: StreamEvent) => {
     if (event.type === "error") throw new Error(event.message ?? "Generation failed");
+    if (event.type === "message.delta") {
+      deltaQueue.current.push(event);
+      if (!deltaRaf.current) deltaRaf.current = requestAnimationFrame(flushDeltas);
+      return;
+    }
+    if (deltaQueue.current.length) flushDeltas();
     const setter = event.lane === "compare" ? setCompareMessages : setMessages;
     setter((items) => {
       if (event.type === "message.started") return [...items, event.message];
       if (!("message_id" in event)) return items;
       return items.map((item) => {
         if (item.id !== event.message_id) return item;
-        if (event.type === "message.delta") return { ...item, content: item.content + event.delta };
         if (event.type === "citation") return { ...item, citations: [...item.citations, event.citation] };
         if (event.type === "message.completed") return { ...item, state: "complete" };
         if (event.type === "message.cancelled") return { ...item, state: "cancelled" };
@@ -208,7 +275,7 @@ export default function App() {
   };
 
   const submit = async (content = input, regenerate_message_id?: string) => {
-    if ((!content.trim() && pendingFiles.length === 0) || streaming) return;
+    if ((!content.trim() && pendingFiles.length === 0) || streaming || !modelInfo.ready) return;
     let conversationId = activeId;
     try {
       if (!conversationId) {
@@ -228,6 +295,8 @@ export default function App() {
       const attachment_ids = pendingFiles.map((file) => file.id);
       setPendingFiles([]);
       setInput("");
+      pinToBottom.current = true;
+      setShowJump(false);
       setStreaming(true);
       const controller = new AbortController();
       abortRef.current = controller;
@@ -284,7 +353,6 @@ export default function App() {
     if (prompt) void submit(prompt, message.id);
   };
 
-  const modelInfo = useMemo(() => models.find((item) => item.id === model) ?? fallbackModels[0], [models, model]);
   return (
     <div className="app-shell">
       <aside className={sidebar ? "sidebar" : "sidebar collapsed"}>
@@ -328,7 +396,13 @@ export default function App() {
         </header>
 
         {connectionError && <div className="connection-banner"><span><i /> Sidecar unavailable</span><p>{connectionError}</p><button onClick={() => void refresh(search)}>Retry</button><button onClick={() => setConnectionError(null)}><X /></button></div>}
-        <section className={`chat ${compare ? "compare" : ""}`}>
+        {!connectionError && !modelInfo.ready && (
+          <div className="connection-banner setup-banner">
+            <span><i /> Model not ready</span>
+            <p>Phi-4 Mini is not available yet. Install Ollama and the model with <code>scripts\install-ollama-phi4.ps1</code>, then keep Ollama running.</p>
+          </div>
+        )}
+        <section ref={chatRef} className={`chat ${compare ? "compare" : ""}`} onScroll={syncJump}>
           {compare && <div className="compare-head"><div>{modelInfo.name}<small>Primary</small></div><div>{models.find((m) => m.id === compareModel)?.name}<small>Runs second to conserve memory</small></div></div>}
           {!messages.length && !compare ? <EmptyState setInput={setInput} /> : compare ? (
             <div className="compare-grid">
@@ -336,8 +410,12 @@ export default function App() {
               <div>{compareMessages.map((item) => <MessageView key={item.id} message={item} onCitations={setCitations} onFeedback={feedback} onRegenerate={regenerate} onEdit={(m) => setInput(m.content)} />)}</div>
             </div>
           ) : <div className="message-list">{messages.map((item) => <MessageView key={item.id} message={item} onCitations={setCitations} onFeedback={feedback} onRegenerate={regenerate} onEdit={(m) => setInput(m.content)} />)}</div>}
-          <div ref={bottomRef} />
         </section>
+        {showJump && (
+          <button className="jump-latest" onClick={scrollToLatest} type="button">
+            <ArrowDown size={14} /> Latest
+          </button>
+        )}
 
         <footer className="composer-area">
           {pendingFiles.length > 0 && (
@@ -357,9 +435,8 @@ export default function App() {
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit(); } }}
               placeholder="Ask a research question…" />
             {streaming ? <button className="send stop" onClick={stop} title="Stop"><Square /></button>
-              : <button className="send" disabled={!input.trim() && pendingFiles.length === 0} onClick={() => void submit()} title="Send"><Send /></button>}
+              : <button className="send" disabled={!modelInfo.ready || (!input.trim() && pendingFiles.length === 0)} onClick={() => void submit()} title="Send"><Send /></button>}
           </div>
-          <div className="composer-note"><span><i className={modelInfo.ready ? "online" : ""} /> {modelInfo.name}</span> Verify important claims against cited sources.</div>
         </footer>
       </main>
 

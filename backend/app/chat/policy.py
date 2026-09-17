@@ -1,6 +1,11 @@
-"""Frozen research contract shared by Phi-4 Mini chat, eval, and clone jobs."""
+"""Frozen research contract shared by Phi-4 Mini chat and eval."""
 
 from __future__ import annotations
+
+CASUAL_POLICY = (
+    "You are a local assistant. Answer directly and concisely. "
+    "Do not invent citations, DOIs, URLs, or paper titles."
+)
 
 SYSTEM_POLICY = """You are an evidence-first research assistant. Phi-4 Mini weights stay frozen.
 

@@ -53,19 +53,24 @@ class OllamaClient:
     def __init__(self, settings: Settings | None = None, client: httpx.AsyncClient | None = None):
         self.settings = settings or get_settings()
         self._external_client = client
+        self._owned_client: httpx.AsyncClient | None = None
 
     def _http_client(self) -> httpx.AsyncClient:
-        return self._external_client or httpx.AsyncClient(
-            base_url=self.settings.ollama_base_url.rstrip("/"),
-            timeout=httpx.Timeout(
-                self.settings.ollama_read_timeout,
-                connect=self.settings.ollama_connect_timeout,
-            ),
-        )
+        if self._external_client is not None:
+            return self._external_client
+        if self._owned_client is None or self._owned_client.is_closed:
+            self._owned_client = httpx.AsyncClient(
+                base_url=self.settings.ollama_base_url.rstrip("/"),
+                timeout=httpx.Timeout(
+                    self.settings.ollama_read_timeout,
+                    connect=self.settings.ollama_connect_timeout,
+                ),
+            )
+        return self._owned_client
 
     async def list_models(self) -> list[dict[str, Any]]:
         client = self._http_client()
-        should_close = self._external_client is None
+        should_close = False
         try:
             response = await client.get("/api/tags")
             response.raise_for_status()
@@ -144,6 +149,14 @@ class OllamaClient:
             normalized[-1]["content"] = normalized[-1]["content"][overflow:]
         return normalized
 
+    def _generation_options(self, temperature: float | None) -> dict[str, Any]:
+        return {
+            "temperature": self.settings.ollama_temperature if temperature is None else temperature,
+            "num_ctx": self.settings.ollama_context_window,
+            "num_predict": self.settings.ollama_num_predict,
+            "num_batch": self.settings.ollama_num_batch,
+        }
+
     async def chat(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -162,18 +175,14 @@ class OllamaClient:
             "model": chosen,
             "messages": self._bounded_messages(messages),
             "stream": False,
-            "options": {
-                "temperature": (
-                    self.settings.ollama_temperature if temperature is None else temperature
-                ),
-                "num_ctx": self.settings.ollama_context_window,
-            },
+            "keep_alive": self.settings.ollama_keep_alive,
+            "options": self._generation_options(temperature),
         }
         if schema is not None:
             payload["format"] = schema.model_json_schema()
 
         client = self._http_client()
-        should_close = self._external_client is None
+        should_close = False
         try:
             response: httpx.Response | None = None
             for attempt in range(self.settings.ollama_max_retries + 1):
@@ -215,23 +224,15 @@ class OllamaClient:
     ) -> AsyncIterator[str]:
         """Stream text deltas from Ollama and stop promptly when cancellation is requested."""
         chosen = model or self.settings.ollama_model
-        if not await self.model_available(chosen):
-            raise OllamaModelUnavailable(
-                f"Model '{chosen}' is not installed. Run: ollama pull {chosen}"
-            )
         payload = {
             "model": chosen,
             "messages": self._bounded_messages(messages),
             "stream": True,
-            "options": {
-                "temperature": (
-                    self.settings.ollama_temperature if temperature is None else temperature
-                ),
-                "num_ctx": self.settings.ollama_context_window,
-            },
+            "keep_alive": self.settings.ollama_keep_alive,
+            "options": self._generation_options(temperature),
         }
         client = self._http_client()
-        should_close = self._external_client is None
+        should_close = False
         try:
             async with client.stream("POST", "/api/chat", json=payload) as response:
                 response.raise_for_status()
@@ -249,6 +250,12 @@ class OllamaClient:
                         yield str(delta)
                     if item.get("done"):
                         return
+        except httpx.HTTPStatusError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                raise OllamaModelUnavailable(
+                    f"Model '{chosen}' is not installed. Run scripts/install-ollama-phi4.ps1"
+                ) from exc
+            raise OllamaError(f"Ollama stream failed: {exc}") from exc
         except (httpx.HTTPError, httpx.StreamError) as exc:
             raise OllamaError(f"Ollama stream failed: {exc}") from exc
         finally:

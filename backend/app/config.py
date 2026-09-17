@@ -4,7 +4,7 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = (
@@ -33,9 +33,12 @@ class Settings(BaseSettings):
     ollama_connect_timeout: float = Field(default=5.0, gt=0)
     ollama_read_timeout: float = Field(default=120.0, gt=0)
     ollama_max_retries: int = Field(default=2, ge=0, le=10)
-    ollama_context_window: int = Field(default=8192, ge=512)
-    ollama_max_input_chars: int = Field(default=24000, ge=1000)
+    ollama_context_window: int = Field(default=2048, ge=512)
+    ollama_max_input_chars: int = Field(default=6000, ge=1000)
     ollama_temperature: float = Field(default=0.2, ge=0, le=2)
+    ollama_num_predict: int = Field(default=512, ge=32, le=4096)
+    ollama_num_batch: int = Field(default=256, ge=8, le=2048)
+    ollama_keep_alive: str = "30m"
 
     openalex_api_key: str | None = None
     scholarly_email: str | None = None
@@ -51,6 +54,20 @@ class Settings(BaseSettings):
     training_records_path: Path = Path("data/training/feedback.jsonl")
     training_path: Path = Path("data/training")
     feedback_source_salt: str | None = Field(default=None, min_length=16)
+
+    @field_validator(
+        "feedback_source_salt",
+        "openalex_api_key",
+        "scholarly_email",
+        "crossref_api_key",
+        "semantic_scholar_api_key",
+        mode="before",
+    )
+    @classmethod
+    def blank_optional_text(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @property
     def project_root(self) -> Path:

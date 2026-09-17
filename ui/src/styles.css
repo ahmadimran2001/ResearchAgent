@@ -2,6 +2,7 @@
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #e7e8ea;
   background: #0d0f12;
+  color-scheme: dark;
   font-synthesis: none;
   --panel: #121418;
   --panel-2: #181b20;
@@ -57,13 +58,29 @@ header { height: 62px; flex: none; padding: 0 20px; border-bottom: 1px solid var
 .compare-toggle span:after { content: ""; position: absolute; width: 12px; height: 12px; border-radius: 50%; top: 2px; left: 2px; background: #9298a0; transition: .15s; }
 .compare-toggle input:checked + span { background: var(--accent-2); }.compare-toggle input:checked + span:after { left: 14px; background: white; }
 .model-select { position: relative; border: 1px solid var(--line); border-radius: 7px; background: #17191e; }
-.model-select select { appearance: none; border: 0; background: transparent; padding: 7px 28px 7px 10px; font-size: 11px; outline: 0; }
+.model-select select {
+  appearance: none; border: 0; background: #17191e; color: #e7e8ea;
+  padding: 7px 28px 7px 10px; font-size: 11px; outline: 0; color-scheme: dark;
+}
+.model-select option, .model-select optgroup {
+  background-color: #17191e; color: #e7e8ea;
+}
 .model-select svg { width: 12px; position: absolute; pointer-events: none; right: 8px; top: 8px; color: var(--muted); }
 .connection-banner { display: flex; align-items: center; gap: 10px; background: #291f1d; border-bottom: 1px solid #6c4038; padding: 7px 18px; font-size: 11px; }
 .connection-banner span { font-weight: 650; }.connection-banner i, .composer-note i, .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #db6b58; margin-right: 5px; }
 .connection-banner p { color: #c7a49d; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
 .connection-banner button { border: 0; background: transparent; color: #f1c4ba; font-size: 11px; }.connection-banner button svg { width: 14px; }
-.chat { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior: smooth; }
+.chat { flex: 1; min-height: 0; overflow-y: auto; }
+.setup-banner { background: #1d2430; border-bottom-color: #3d4d66; }
+.setup-banner span { color: #d5e2f5; }
+.setup-banner p { color: #9eb0c7; white-space: normal; }
+.setup-banner code { color: #e8eef8; }
+.jump-latest {
+  position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 6px; border: 1px solid #3a414c; border-radius: 999px;
+  background: #1b1e24; color: #e7e8ea; padding: 6px 12px; font-size: 11px; box-shadow: 0 8px 24px #0006;
+}
+.jump-latest:hover { background: #242830; }
 .empty-state { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; max-width: 700px; margin: auto; padding: 50px 30px 110px; text-align: center; }
 .brand-mark { width: 45px; height: 45px; border-radius: 13px; font-size: 20px; margin-bottom: 19px; }
 .empty-state h1 { font-size: 25px; margin: 0 0 9px; letter-spacing: -.03em; }.empty-state > p { margin: 0; color: var(--muted); font-size: 13px; }
@@ -81,6 +98,7 @@ header { height: 62px; flex: none; padding: 0 20px; border-bottom: 1px solid var
 .stream-label i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: pulse 1.1s infinite; }
 @keyframes pulse { 50% { opacity: .25; } }
 .markdown { font-size: 13px; line-height: 1.68; color: #d8dade; overflow-wrap: anywhere; }
+.stream-plain { margin: 4px 0 0; font: inherit; color: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
 .markdown > :first-child { margin-top: 4px; }.markdown p { margin: 6px 0 12px; }.markdown h1,.markdown h2,.markdown h3 { margin: 20px 0 8px; line-height: 1.3; }
 .markdown h1 { font-size: 19px; }.markdown h2 { font-size: 16px; }.markdown h3 { font-size: 14px; }
 .markdown a { color: #baa5f6; }.markdown blockquote { border-left: 2px solid #6d58a9; margin: 12px 0; padding-left: 13px; color: #aeb3bd; }

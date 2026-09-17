@@ -53,4 +53,9 @@ async def test_structured_ollama_request_is_bounded_and_validated() -> None:
     await http.aclose()
     assert result == StructuredAnswer(answer="ready")
     assert [request.url.path for request in requests] == ["/api/tags", "/api/chat"]
+    chat_payload = json.loads(requests[-1].content)
+    assert chat_payload["keep_alive"] == "30m"
+    assert chat_payload["options"]["num_ctx"] == 2048
+    assert chat_payload["options"]["num_predict"] == 512
+    assert chat_payload["options"]["num_batch"] == 256
 
